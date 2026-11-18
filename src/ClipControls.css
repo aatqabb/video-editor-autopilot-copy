@@ -22,12 +22,39 @@
 .clip-control-value{height:24px;display:grid;grid-template-columns:minmax(42px,1fr) 20px;align-items:center;background:#101012;border:1px solid #35353a;border-radius:2px;overflow:hidden}
 .clip-control-row .clip-control-number{width:100%;height:22px;background:transparent;border:0;color:#e1e1e4;padding:0 4px;font-family:Consolas,monospace;font-size:9px;min-width:0;outline:none}
 .clip-control-row small{display:flex;align-items:center;justify-content:center;height:100%;border-left:1px solid #303034;color:#727279;font-size:8px}
-.crop-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.crop-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-top:5px}
 .crop-grid label{display:grid;grid-template-columns:1fr 52px 13px;align-items:center;gap:4px;color:#a0a0a6;background:#1d1d20;border:1px solid #303034;border-radius:2px;padding:4px 5px;font-size:9px}
 .crop-grid input{height:23px;background:#101012;border:1px solid #36363b;color:#ddd;border-radius:2px;padding:0 5px;font-family:Consolas,monospace;font-size:9px;min-width:0}
 .crop-grid small{color:#6f6f76;font-size:8px}
+.crop-grid-label{color:#77777f;font-size:8px;text-transform:uppercase;letter-spacing:.3px;margin:6px 0 3px}
+.crop-grid-label-with-reset{display:flex;align-items:center;justify-content:space-between}
+.crop-reset-inline{color:#6f6f76;font-size:10px;line-height:1;padding:1px 3px}
+.crop-reset-inline:hover{color:#fff}
+
+/* Scale Width lives right next to Scale but is disabled while Uniform
+   Scale is on (matches Premiere: it only does anything once you break
+   the width/height link), and the Uniform Scale checkbox itself is a
+   plain toggle row, not a slider — reusing clip-control-row's grid for
+   it would leave two empty/meaningless columns. */
+.clip-control-row.is-disabled{opacity:.4}
+.clip-control-toggle-row{display:flex;align-items:center;gap:8px;min-height:26px;color:#9999a0}
+.clip-control-toggle-row input[type=checkbox]{width:13px;height:13px;accent-color:#4d9be8}
+.clip-control-select-row{display:grid;grid-template-columns:70px 1fr;align-items:center;gap:7px;min-height:31px;color:#9999a0}
+.clip-control-select{height:24px;background:#101012;border:1px solid #35353a;border-radius:2px;color:#e1e1e4;font-size:9px;padding:0 4px;width:100%}
+
+/* Position, Premiere-style: one row, X and Y side by side, one shared
+   stopwatch — see PairedKeyframeRow in ClipControls.jsx. */
+.paired-row{grid-template-columns:70px minmax(60px,1fr) 18px}
+.paired-inputs{display:flex;gap:6px;min-width:0}
+.paired-field{display:flex;align-items:center;gap:3px;background:#101012;border:1px solid #35353a;border-radius:2px;height:24px;padding:0 5px;flex:1;min-width:0}
+.paired-field small{color:#6f6f76;font-size:8px;flex-shrink:0}
+.paired-field input{width:100%;min-width:0;background:transparent;border:0;color:#e1e1e4;font-family:Consolas,monospace;font-size:9px;outline:none}
 .clip-button-row,.effect-quick-row{display:flex;gap:4px;margin-top:5px}
-.clip-button-row button,.effect-quick-row button{flex:1;min-width:0;height:25px;border:1px solid #37373c;border-radius:2px;background:#242428;font-size:9px;color:#aaaab0}
+/* Was 25px tall with a fairly bright border — read as chunky/rough next to
+   the rest of the panel's 22-24px rows. Slimmed down and given a quieter
+   border so it sits flush with everything else (Fit/Fill/Stretch, speed
+   presets, Center/100%/0°, Freeze Frame all share this class). */
+.clip-button-row button,.effect-quick-row button{flex:1;min-width:0;height:22px;border:1px solid #2e2e33;border-radius:2px;background:#202024;font-size:8.5px;font-weight:400;color:#a3a3aa}
 .clip-button-row button:hover,.clip-button-row button.active,.effect-quick-row button:hover,.effect-quick-row button.active{background:#28425d;border-color:#3d83bf;color:#fff}
 .clip-button-row.segmented{gap:0}
 .clip-button-row.segmented button{border-radius:0;margin-left:-1px}
@@ -43,6 +70,13 @@
 .video-preset-grid button{min-height:36px;background:#202024;border:1px solid #34343a;border-radius:3px;padding:5px;font-size:9px;line-height:1.25;color:#c7c7cc}
 .video-preset-grid button:hover{background:#2c2c31;border-color:#4d5662;color:#fff}
 
+/* Row of one-click Align actions above Position/Anchor/Scale/Rotation/
+   Opacity in the shared "Align and Transform" group (text clips, Text panel
+   and Effect Controls alike). */
+.align-row{display:flex;gap:4px;margin-bottom:6px}
+.align-row button{flex:1;height:24px;border:1px solid #35353a;background:#202024;color:#b0b0b6;border-radius:2px;font-size:11px}
+.align-row button:hover{background:#2a2a2f;border-color:#4d5662;color:#fff}
+
 /* Per-property keyframing, Premiere-Effect-Controls style: a small diamond
    stopwatch sits at the end of the row itself (not tucked away in its own
    separate "Animate Over Time" section any more — Position/Scale/Rotation/
@@ -55,11 +89,15 @@
 .keyframe-diamond:hover svg rect{stroke:#9c9ca3}
 .keyframe-diamond.enabled svg rect{fill:#3d5a75;stroke:#5a97cf}
 .keyframe-diamond.enabled.has-key svg rect{fill:#4d9be8;stroke:#dbeeff}
-.keyframe-strip{padding:2px 0 5px 70px}
-.keyframe-strip-track{position:relative;height:10px;background:#101012;border:1px solid #2b2b2f;border-radius:2px}
-.keyframe-strip-dot{position:absolute;top:50%;width:8px;height:8px;padding:0;background:#4d9be8;border:1px solid #dbeeff;transform:translate(-50%,-50%) rotate(45deg);border-radius:1px}
+.keyframe-strip{padding:3px 0 6px 70px}
+/* Was a 10px pill with a visible border/radius all the way around — read as
+   a thick, rough-edged bar rather than a real NLE's hairline mini-timeline.
+   A thin flat line (no radius, no side borders) with a small plain dot
+   reads far closer to Premiere's own keyframe strip. */
+.keyframe-strip-track{position:relative;height:2px;background:#35353a;border-radius:0}
+.keyframe-strip-dot{position:absolute;top:50%;width:6px;height:6px;padding:0;background:#4d9be8;border:1px solid #dbeeff;transform:translate(-50%,-50%) rotate(45deg);border-radius:0}
 .keyframe-strip-dot:hover{background:#6fb2f5}
-.keyframe-strip-playhead{position:absolute;top:-2px;bottom:-2px;width:1px;background:#f3c64e;transform:translateX(-50%);pointer-events:none}
+.keyframe-strip-playhead{position:absolute;top:-3px;bottom:-3px;width:1px;background:#f3c64e;transform:translateX(-50%);pointer-events:none}
 .voiceover-workspace{padding:0 7px 7px}
 .voiceover-workspace .clip-controls-heading{margin:0 -7px 8px}
 .voiceover-actions{display:grid;gap:6px}

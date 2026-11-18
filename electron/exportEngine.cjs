@@ -387,6 +387,20 @@ function colorGradeFilters(clip) {
   return filters
 }
 
+// Anchor Point and Blend Mode (Effect Controls "Motion"/"Opacity") are real,
+// working controls in the live Program Monitor preview (CSS transform-origin
+// and mix-blend-mode respectively — see programVideoStyle in App.jsx), but
+// are deliberately NOT wired into export below: an arbitrary rotation/scale
+// pivot needs per-frame trig added to the overlay position expression this
+// file already time-varies for keyframes and transitions, and a blend mode
+// needs the overlay-based compositing chain rewired to ffmpeg's `blend`
+// filter (which has no x/y offset of its own, unlike `overlay`) — both are
+// real changes to filter graphs that are already verified against real
+// renders, and doing them blind (no render preview available while editing
+// this file) risks silently breaking those. So, same as the opacity
+// keyframe mid-range case above: export currently ignores anchorX/anchorY
+// and any non-"normal" blendMode, and ships with center anchor / normal
+// blend regardless of what's set. Told to the user rather than left silent.
 function videoClipFilter(clip, inputIndex, width, height, fps) {
   const video = clip.video || {}
   const cropTop = Math.max(0, Math.min(49, Number(video.cropTop) || 0)) / 100
@@ -396,7 +410,13 @@ function videoClipFilter(clip, inputIndex, width, height, fps) {
   const cropW = Math.max(.02, 1 - cropLeft - cropRight)
   const cropH = Math.max(.02, 1 - cropTop - cropBottom)
   const scalePercent = Math.max(.01, (Number(video.scale) || 100) / 100)
-  const targetW = Math.max(2, Math.round(width * scalePercent))
+  // Uniform Scale off -> Scale Width drives the target width independently
+  // of Scale (which still drives height) — same undefined-means-true default
+  // as the live preview, so clips saved before this field existed keep
+  // rendering byte-for-byte the same as before.
+  const isUniformScale = video.uniformScale !== false
+  const scaleWidthPercent = isUniformScale ? scalePercent : Math.max(.01, (Number(video.scaleWidth) || 100) / 100)
+  const targetW = Math.max(2, Math.round(width * scaleWidthPercent))
   const targetH = Math.max(2, Math.round(height * scalePercent))
   const fit = video.fitMode || 'Fit'
   const scaleFilter = fit === 'Stretch'

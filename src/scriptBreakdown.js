@@ -13,12 +13,10 @@ import { suggestSfxForLine } from './sfxSuggestions'
 // this by hand once the clip is placed on the timeline.
 const WORDS_PER_MINUTE = 150
 
-// General-purpose "line of narration -> what to show" concept map. This is
-// deliberately broader than the finance/football-tuned CONCEPT_MAP in
-// youtubeApi.js (that one is aimed at the AI Footage Finder's search
-// queries) — Script Breakdown has to handle ANY everyday scene a script
-// might describe (waking up, an argument, a business meeting, a football
-// match, a philosophical idea), not just economic-history topics.
+// General-purpose "line of narration -> what to show" concept map. Script
+// Breakdown has to handle ANY everyday scene a script might describe
+// (waking up, an argument, a business meeting, a football match, a
+// philosophical idea), not just economic-history topics.
 const VISUAL_CONCEPT_MAP = [
   // Daily routine / morning-night
   { match: /\b(wake(s|d)? up|waking up|alarm( clock)?|snooze)\b/i, concepts: ['alarm clock ringing', 'person waking up in bed', 'morning sunlight through window'] },

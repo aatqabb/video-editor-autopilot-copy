@@ -25,14 +25,33 @@ input,textarea,select{user-select:text}
 .tab-strip button:hover{background:#232327}
 .tab-strip button.active{color:#fff;border-bottom-color:#2f8cff}
 .tab-more-trigger{margin-left:auto;color:#9c9ca3;flex-shrink:0}
+.monitor-fullscreen-toggle{margin-left:auto;color:#9c9ca3;flex-shrink:0;font-size:13px}
+.monitor-fullscreen-toggle:hover{color:#fff}
+/* Same ⛶ icon toggles both directions (enter/exit) - the request was for
+   one consistent icon, not a swap to a "shrink" glyph on exit. A wrapper
+   div (not the .right-panel section itself) carries the fixed/full-screen
+   positioning, above everything else in the editor (still under the
+   tab-more-menu's dropdown z-index, so a dropdown opened first stays
+   reachable) — keeping .right-panel's own className/style untouched here
+   is deliberate: scripts/verify-premiere-panel-resize-contract.mjs checks
+   for that exact literal pattern in source. A click on the same button
+   collapses it straight back into its normal place in the grid. */
+.monitor-fullscreen-wrap{position:fixed;inset:0;z-index:300;background:#0d0d0f}
+.monitor-fullscreen-wrap .right-panel{width:100%!important;height:100%}
 .tab-more-menu{position:fixed;z-index:9999;min-width:170px;background:#1c1c20;border:1px solid #3a3a40;border-radius:0 0 5px 5px;padding:4px;box-shadow:0 10px 28px rgba(0,0,0,.5)}
 .tab-more-menu button{display:block;width:100%;text-align:left;padding:7px 9px;border-radius:3px;font-size:10px;color:#c7c7cc}
 .tab-more-menu button:hover{background:#2b2b31;color:#fff}
 .tab-more-menu button.active{color:#fff;background:#1d3a5c}
 .panel-body{height:calc(100% - 29px);overflow:auto}
 .center-body{overflow:hidden}
-.resize-handle.vertical{width:4px;cursor:col-resize;background:#0f0f11;border-left:1px solid #2a2a2d;border-right:1px solid #2a2a2d}
-.resize-handle.horizontal{height:5px;cursor:row-resize;background:#0f0f11;border-top:1px solid #29292d;border-bottom:1px solid #29292d;flex-shrink:0}
+/* Premiere draws no visible line at all between panels — the boundary is
+   just a cursor-only hit zone, and it stays that way even mid-drag. Used to
+   be a persistent 4-5px bordered grey bar, which read as a heavy seam
+   running through the whole layout. Kept the same hit-target width/height
+   (so dragging still starts exactly where it always did) and cursor, just
+   made the strip itself invisible. */
+.resize-handle.vertical{width:4px;cursor:col-resize;background:transparent;border:none}
+.resize-handle.horizontal{height:5px;cursor:row-resize;background:transparent;border:none;flex-shrink:0}
 
 .project-row{height:30px;display:flex;align-items:center;gap:7px;padding:0 8px;border-bottom:1px solid #2c2c30}
 .project-row .item-count{margin-left:auto;color:#8e8e95}
@@ -51,13 +70,41 @@ input,textarea,select{user-select:text}
 .media-meta{color:#85858c;font-size:9px}
 
 .monitor{height:100%;display:flex;flex-direction:column;background:#141416}
-.monitor-screen{flex:1;min-height:0;margin:10px;display:flex;align-items:center;justify-content:center;background:#050506;border:1px solid #2b2b2f;color:#595961;font-size:11px}
+.monitor-screen{position:relative;flex:1;min-height:0;margin:10px;display:flex;align-items:center;justify-content:center;background:#050506;border:1px solid #2b2b2f;color:#595961;font-size:11px}
 .monitor-screen.program{background:linear-gradient(135deg,#111827,#243b55);color:#a6b2c2}
 .monitor-info{height:28px;display:flex;align-items:center;padding:0 8px;border-top:1px solid #2d2d31;color:#4fa0ff;font-family:Consolas,monospace}
 .monitor-info button{margin-left:7px;padding:3px 7px;background:#0e0e10;border:1px solid #34343a;border-radius:3px;color:#ddd;font-family:Segoe UI,Arial,sans-serif}
 .monitor-controls{height:32px;display:flex;align-items:center;justify-content:center;gap:5px;border-top:1px solid #2d2d31}
-.monitor-controls button{width:26px;height:24px;border-radius:3px}
-.monitor-controls button:hover{background:#29292d}
+.monitor-controls button{width:26px;height:24px;border-radius:3px;color:#c6c6cc}
+.monitor-controls button:hover{background:#29292d;color:#fff}
+.monitor-controls button.active{background:#176ec2;color:#fff}
+.monitor-controls button.monitor-play{width:30px;color:#fff}
+
+/* Safe margins overlay (Action Safe 90% / Title Safe 80%), toggled from the
+   Program Monitor transport row — matches Premiere's reference guide. */
+.monitor-safe-margins{position:absolute;inset:0;pointer-events:none;z-index:5}
+.safe-margin{position:absolute;border:1px dashed rgba(255,255,255,.55)}
+.safe-margin.action{inset:5%}
+.safe-margin.title{inset:10%}
+
+/* Blue center-alignment guides shown while dragging video/text in the
+   Program Monitor, and a dotted motion-path overlay (with a dot per
+   Position keyframe) for an already-keyframed clip — both match the
+   reference recording's on-canvas drag feedback. */
+.monitor-snap-guides{position:absolute;inset:0;pointer-events:none;z-index:6}
+.monitor-snap-guide{position:absolute;background:#4d9be8;box-shadow:0 0 4px rgba(77,155,232,.8)}
+.monitor-snap-guide.vertical{left:50%;top:0;bottom:0;width:1px;transform:translateX(-.5px)}
+.monitor-snap-guide.horizontal{top:50%;left:0;right:0;height:1px;transform:translateY(-.5px)}
+.monitor-motion-path{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
+.monitor-motion-path polyline{fill:none;stroke:#f4c430;stroke-width:.6;stroke-dasharray:1.6 1.4;vector-effect:non-scaling-stroke}
+.monitor-motion-path circle{fill:#f4c430;stroke:#1a1a1a;stroke-width:.3;vector-effect:non-scaling-stroke}
+
+/* Word-by-word karaoke caption highlight — the word being spoken right now
+   either changes color or gets a highlight box behind it, set from the
+   Captions workspace's Highlight row. */
+.caption-word{transition:color .1s linear}
+.caption-word-active{color:var(--caption-highlight-color,#ffd400)}
+.caption-word-box.caption-word-active{background:var(--caption-highlight-color,#ffd400);color:#111;border-radius:.18em;padding:.02em .14em;margin:0 -.14em;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 
 .section-label{padding:8px 9px 6px;color:#aeb0b5;font-size:10px;font-weight:600;letter-spacing:.3px}
 .option-panel{padding:5px}
@@ -91,11 +138,27 @@ input,textarea,select{user-select:text}
 .timeline-body{flex:1;min-height:0;display:flex}
 .track-controls{width:156px;flex-shrink:0;background:#18181b;border-right:1px solid #313136;overflow:hidden}
 .ruler-spacer{height:24px;border-bottom:1px solid #2d2d31}
-.track-control{display:flex;align-items:center;gap:4px;padding:0 5px;border-bottom:1px solid #29292d;transition:height .08s linear}
-.track-control strong{width:24px;font-size:10px}
-.track-control button{width:21px;height:21px;border-radius:3px;color:#9b9ba2;font-size:9px}
-.track-control button:hover{background:#29292d}
-.track-control button.on{background:#2266b3;color:white}
+.track-control{display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 5px;border-bottom:1px solid #29292d;transition:height .08s linear;overflow:hidden}
+.track-control-row{display:flex;align-items:center;gap:4px}
+.track-control-row strong{width:24px;font-size:10px}
+.track-control-row button{width:21px;height:21px;border-radius:3px;color:#9b9ba2;font-size:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.track-control-row button:hover{background:#29292d}
+.track-control-row button.on{background:#2266b3;color:white}
+.track-voiceover-btn{color:#e08a3c!important}
+.track-voiceover-btn:hover{background:#4a3018!important}
+.track-name-label{margin-top:2px;padding-left:1px;color:#75757c;font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Per-track drag-resize handle, a thin strip along the track's bottom edge
+   (matching Premiere's own track-height drag) — separate from the global
+   +/- and slider in the timeline toolbar, which still resize every track
+   at once. */
+/* A hover-only highlight with nothing shown at rest is invisible until you
+   happen to find it by accident — this grip line stays faintly visible all
+   the time (like a real resize handle) and only brightens on hover, so the
+   per-track drag handle is actually discoverable instead of a blind guess. */
+.track-resize-handle{position:absolute;left:0;right:0;bottom:0;height:6px;cursor:row-resize;z-index:2;display:flex;align-items:center;justify-content:center}
+.track-resize-handle::after{content:'';width:22px;height:2px;border-radius:1px;background:rgba(255,255,255,.16);transition:background .1s linear}
+.track-resize-handle:hover,.track-resize-handle:active{background:rgba(77,155,232,.4)}
+.track-resize-handle:hover::after,.track-resize-handle:active::after{background:rgba(255,255,255,.65)}
 
 .timeline-scroll{flex:1;min-width:0;overflow:auto;background:#111113;position:relative}
 .time-ruler{height:24px;position:sticky;top:0;z-index:8;background:#171719;border-bottom:1px solid #303034;cursor:ew-resize}

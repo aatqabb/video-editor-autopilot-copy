@@ -5,3 +5,68 @@ body,
   height: 100%;
   margin: 0;
 }
+
+/* App-wide neat slider look: a single thin track (no thick rough border)
+   with a small clean circular thumb, instead of each browser's chunky
+   default accent-color slider render. */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  background: transparent;
+  margin: 0;
+  cursor: pointer;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    #4d9be8 0%,
+    #4d9be8 calc((var(--range-progress, 50) * 1%)),
+    #3a3a40 calc((var(--range-progress, 50) * 1%)),
+    #3a3a40 100%
+  );
+}
+input[type='range']::-moz-range-track {
+  height: 2px;
+  border-radius: 1px;
+  background: #3a3a40;
+}
+input[type='range']::-moz-range-progress {
+  height: 2px;
+  border-radius: 1px;
+  background: #4d9be8;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #4d9be8;
+  border: 1.5px solid #eaf3ff;
+  margin-top: -4.5px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+input[type='range']::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #4d9be8;
+  border: 1.5px solid #eaf3ff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+input[type='range']:hover::-webkit-slider-thumb,
+input[type='range']:focus-visible::-webkit-slider-thumb {
+  background: #6fb2f5;
+}
+input[type='range']:hover::-moz-range-thumb,
+input[type='range']:focus-visible::-moz-range-thumb {
+  background: #6fb2f5;
+}
+input[type='range']:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

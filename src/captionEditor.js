@@ -78,6 +78,68 @@ export function splitSegmentIntoChunks(segment, wordsPerChunk = 8) {
   }))
 }
 
+// Groups word-level AI transcription timestamps (Whisper's
+// `return_timestamps: 'word'` mode — one chunk per WORD) back into readable
+// caption lines, while keeping each line's own per-word timing attached as
+// `words` (absolute seconds, same convention as segment.start/end) so the
+// karaoke word-highlight has real spoken-word timing to work from. A line
+// breaks on a long pause (someone taking a breath / sentence boundary) or
+// once it reaches maxWords / maxChars, whichever comes first.
+export function groupWordsIntoLines(words, { maxWords = 9, maxChars = 46, maxGapSeconds = 0.6 } = {}) {
+  const clean = (words || [])
+    .map((word) => ({ text: String(word.text || '').trim(), start: Number(word.start) || 0, end: Number(word.end) || 0 }))
+    .filter((word) => word.text)
+  if (!clean.length) return []
+
+  const lines = []
+  let current = []
+  const flush = () => {
+    if (!current.length) return
+    lines.push({
+      id: makeSegmentId(),
+      start: current[0].start,
+      end: current[current.length - 1].end,
+      text: current.map((word) => word.text).join(' '),
+      words: current,
+    })
+    current = []
+  }
+
+  for (const word of clean) {
+    const previous = current[current.length - 1]
+    const gap = previous ? word.start - previous.end : 0
+    const wouldBeChars = current.map((w) => w.text).concat(word.text).join(' ').length
+    if (previous && (gap > maxGapSeconds || current.length >= maxWords || wouldBeChars > maxChars)) flush()
+    current.push(word)
+  }
+  flush()
+  return lines
+}
+
+// Manually-typed captions have no real per-word timing (only one start/end
+// for the whole line), so when word-highlight is turned on for those lines
+// we estimate one: each word gets a slice of the line's duration
+// proportional to its own character count (a longer word takes a bit more
+// of the timeline than "a" or "I"), placed back-to-back with no gaps. It
+// won't be frame-accurate like real Whisper timestamps, but it tracks
+// noticeably better than splitting the duration evenly by word count.
+export function estimateWordTimings(text, start, end) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean)
+  const safeStart = Number(start) || 0
+  const safeEnd = Math.max(safeStart + 0.05, Number(end) || safeStart + 0.05)
+  const duration = safeEnd - safeStart
+  const weights = words.map((word) => word.length + 1)
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1
+  let cursor = safeStart
+  return words.map((word, index) => {
+    const span = (weights[index] / totalWeight) * duration
+    const wordStart = cursor
+    const wordEnd = index === words.length - 1 ? safeEnd : cursor + span
+    cursor = wordEnd
+    return { text: word, start: wordStart, end: wordEnd }
+  })
+}
+
 // Saves a text file to disk using the File System Access API when available
 // (same technique already used by projectPersistence.js for .vedit.json
 // project files), falling back to a Blob download link otherwise.

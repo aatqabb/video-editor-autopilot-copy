@@ -28,6 +28,32 @@
 .program-resize-handle.bottom-left{left:-4px;bottom:-4px;cursor:nesw-resize}
 .program-resize-handle.bottom-right{right:-4px;bottom:-4px;cursor:nwse-resize}
 .program-resize-handle:hover{background:#58a6ff}
+/* Rotate handle: a small circle connected to the top edge by a thin stalk
+   (Premiere/CapCut convention), drag it around the clip's center to set
+   rotation without opening Effect Controls at all. Deliberately placed
+   INSIDE the box (hanging down from the top edge) rather than floating
+   above it like a real NLE's does — the Program Monitor's screen has
+   overflow:hidden (it has to, so video dragged/scaled past the frame gets
+   clipped instead of spilling into the surrounding UI), and at the very
+   common 100% scale the video layer already fills that screen edge to
+   edge, so anything positioned outside the box would be clipped away and
+   silently unclickable. Kept always-visible (not hover-only) like the
+   corner resize handles, on purpose — a handle that only appears on hover
+   is exactly the discoverability trap the track-resize-handle fix earlier
+   in this project had to correct for. */
+.program-rotate-stalk{position:absolute;left:50%;top:0;width:1px;height:22px;background:#58a6ff;pointer-events:none;transform:translateX(-50%)}
+.program-rotate-handle{position:absolute;left:50%;top:22px;width:10px;height:10px;padding:0;margin:0;background:#2f8cff;border:1px solid #f7fbff;border-radius:50%;pointer-events:auto;z-index:21;transform:translate(-50%,-50%);cursor:grab}
+.program-rotate-handle:hover{background:#58a6ff}
+.program-rotate-handle:active{cursor:grabbing}
+/* Crop handles: one small bar per edge, sitting on that edge's current
+   crop line (flush with the box edge at 0%, sliding inward as it grows).
+   Amber, not blue, and bar-shaped rather than round, so they read as a
+   different tool from the blue scale/rotate handles even where they start
+   out at almost the same spot (all crop values default to 0). */
+.program-crop-handle{position:absolute;padding:0;margin:0;background:#e0a030;border:1px solid #1a1a1a;pointer-events:auto;z-index:22;cursor:ns-resize}
+.program-crop-handle.top,.program-crop-handle.bottom{left:50%;width:18px;height:5px;transform:translate(-50%,-50%)}
+.program-crop-handle.left,.program-crop-handle.right{top:50%;width:5px;height:18px;transform:translate(-50%,-50%);cursor:ew-resize}
+.program-crop-handle:hover{background:#f0b854}
 
 /* Text/caption/lower-third overlays ship with pointer-events:none in
    CreativePanels.css (so they never block clicks to the video below) —

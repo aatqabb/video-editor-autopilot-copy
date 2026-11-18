@@ -38,6 +38,8 @@
 .caption-mode-row,.caption-align-row{display:flex;gap:4px}
 .caption-mode-row button,.caption-align-row button{height:24px;padding:0 8px;border:1px solid #37373c;border-radius:3px;background:#242428;color:#aaaab0;font-size:8.5px}
 .caption-mode-row button.active,.caption-align-row button.active{background:#176ec2;border-color:#257ed1;color:#fff}
+.caption-style-row select{height:24px;padding:0 5px;background:#101012;border:1px solid #36363b;color:#ddd;border-radius:3px;font-size:8.5px;max-width:130px}
+.swatch-only{width:24px;height:22px;padding:0;border:1px solid #36363b;border-radius:3px;background:#101012;flex-shrink:0}
 .caption-position-grid{display:grid;grid-template-columns:repeat(3,22px);grid-template-rows:repeat(3,22px);gap:3px}
 .caption-position-grid button{border:1px solid #37373c;border-radius:2px;background:#242428;color:#c7c7cc;font-size:10px;padding:0}
 .caption-position-grid button.active{background:#176ec2;border-color:#257ed1;color:#fff}

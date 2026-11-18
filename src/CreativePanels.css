@@ -23,7 +23,54 @@
 .text-content-input{width:100%;min-height:55px;resize:vertical;background:#101012;border:1px solid #36363b;color:#e5e5e8;border-radius:3px;padding:6px;margin-bottom:6px;font-size:10px;line-height:1.35}
 .creative-grid{display:grid;gap:5px;margin-bottom:6px}
 .creative-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.creative-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .creative-grid label{display:grid;gap:3px;color:#898990;font-size:9px}
+
+/* Properties-panel additions: style-icon row (Bold/Italic/AllCaps/SmallCaps/
+   Superscript/Subscript/Underline), Appearance rows (Fill/Stroke/
+   Background/Shadow, each a checkbox + swatch + eyedropper), and a note
+   shown before a text clip exists (Align and Transform needs a real clip). */
+.style-icon-row button{min-width:26px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;color:#c6c6cc}
+.style-icon-row button.active{color:#fff}
+
+/* Swatch + corner-badge eyedropper, matching the reference's small pipette
+   overlapping the color chip's corner instead of a separate button beside
+   it. .swatch-wrap is the positioning context. */
+.swatch-wrap{position:relative;display:inline-flex;flex-shrink:0}
+.swatch-wrap input[type=color]{width:26px;height:24px;padding:0;border:1px solid #37373c;border-radius:3px;background:transparent}
+.eyedropper-btn{position:absolute;right:-5px;bottom:-5px;height:15px;width:15px;min-width:15px;padding:0;border:1px solid #171719;background:#2c2c31;border-radius:50%;color:#cfcfd4;display:flex;align-items:center;justify-content:center}
+.eyedropper-btn:hover{background:#397fbd;color:#fff}
+.eyedropper-btn svg{width:9px;height:9px}
+
+.appearance-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.appearance-row .text-bg-toggle{color:#7db8ef;font-weight:600;min-width:76px}
+.appearance-row select{height:24px;flex:1;min-width:60px}
+.number-input.small{width:48px}
+.align-transform-hint{margin:6px 1px 10px;line-height:1.4}
+
+/* Compact icon + slider + value row used for Background/Shadow numeric
+   controls and the Tracking/Line Spacing/Baseline Shift trio — matches the
+   reference's dense icon-labeled rows instead of a text label sitting on
+   its own line above the field. */
+.icon-field-row{display:grid;grid-template-columns:18px minmax(40px,1fr) 44px;align-items:center;gap:7px;min-height:24px;margin-bottom:5px;color:#9999a0}
+.icon-field-row .field-icon{display:flex;align-items:center;justify-content:center;color:#8b8b92}
+.icon-field-row input[type=number]{height:22px;background:#101012;border:1px solid #35353a;color:#dbeeff;font-family:Consolas,monospace;font-size:9px;border-radius:2px;padding:0 4px;text-align:right;width:100%}
+.icon-field-grid{display:flex;flex-direction:column;margin-bottom:2px}
+.icon-field-grid .icon-field-row{margin-bottom:5px}
+
+/* Flat, uniform (no progress-fill) scrubber variant for this panel — a
+   plain single-tone line with a small ring thumb, matching Premiere's own
+   Properties-panel sliders instead of the blue "progress bar" style used
+   for the Effect Controls keyframe sliders elsewhere in the app. */
+input.prop-slider{-webkit-appearance:none;appearance:none;width:100%;height:14px;background:transparent;margin:0;cursor:pointer}
+input.prop-slider::-webkit-slider-runnable-track{height:2px;border-radius:1px;background:#4a4a52}
+input.prop-slider::-moz-range-track{height:2px;border-radius:1px;background:#4a4a52}
+input.prop-slider::-moz-range-progress{height:2px;border-radius:1px;background:#4a4a52}
+input.prop-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:10px;height:10px;border-radius:50%;background:#c7c7cc;border:1.5px solid #171719;margin-top:-4px}
+input.prop-slider::-moz-range-thumb{width:10px;height:10px;border-radius:50%;background:#c7c7cc;border:1.5px solid #171719}
+input.prop-slider:hover::-webkit-slider-thumb,input.prop-slider:focus-visible::-webkit-slider-thumb{background:#fff}
+
+.align-icon-row button{min-width:26px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;color:#c6c6cc}
 .creative-actions{display:flex;gap:5px;margin-top:8px;border-top:1px solid #303034;padding-top:7px}
 .creative-actions button{height:28px;padding:0 9px;border:1px solid #3b3b41;background:#252529;border-radius:3px;font-size:9px}
 .creative-actions button:hover{background:#303035}
@@ -42,6 +89,17 @@
 .sfx-row>button{height:22px;border-radius:3px;border:1px solid #37373c;background:#28282c;font-size:8px}
 .sfx-row>button:hover{background:#333338;color:#fff}
 .sfx-play{width:25px;padding:0}
+
+/* Font search box + favorite star (above the font family select) and the
+   favorites quick-pick chip row — lets a handful of go-to fonts stay one
+   click away instead of scrolling a long installed-fonts list every time. */
+.font-search-row{gap:5px}
+.font-search-input{flex:1}
+.font-fav-toggle{width:26px;flex-shrink:0;font-size:13px;color:#8b8b92}
+.font-fav-toggle.active{color:#f4c430;border-color:#8a6d1a;background:#2a2410}
+.font-favorites-row{margin-top:-2px}
+.font-favorites-row button{color:#e0c26a}
+.font-favorites-row button.active{background:#2d3540;border-color:#397fbd;color:#fff}
 
 .text-preset-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
 .text-preset-row button{height:24px;padding:0 11px;border:1px solid #37373c;border-radius:12px;background:#1d1d20;color:#c7c7cc;font-size:9px}

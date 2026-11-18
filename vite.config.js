@@ -16,9 +16,13 @@ import { stockWorkspacePlugin } from './scripts/vite-stock-workspace-plugin.js'
 import { programTransformOverlayPlugin } from './scripts/vite-program-transform-overlay-plugin.js'
 import { timelineTransitionVisibilityPlugin } from './scripts/vite-timeline-transition-visibility-plugin.js'
 import { allAudioWaveformsPlugin } from './scripts/vite-all-audio-waveforms-plugin.js'
+import { monitorTransportPlugin } from './scripts/vite-monitor-transport-plugin.js'
+import { trackHeaderPlugin } from './scripts/vite-track-header-plugin.js'
+import { monitorGuidesPlugin } from './scripts/vite-monitor-guides-plugin.js'
+import { captionKaraokePlugin } from './scripts/vite-caption-karaoke-plugin.js'
 
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
-  plugins: [normalizeLineEndingsPlugin(), stockWorkspacePlugin(), timelineRefactorPlugin(), overlapReplacementPlugin(), playbackMediaPlugin(), unlimitedTimelineImportPlugin(), durationUiSyncPlugin(), programPlaybackSyncPlugin(), programPreviewStabilityPlugin(), premierePlayheadPlugin(), smoothTimelineDragPlugin(), trackDeletePlugin(), trackVisibilityUiPlugin(), timelineTransitionVisibilityPlugin(), allAudioWaveformsPlugin(), programTransformOverlayPlugin(), react()],
+  plugins: [normalizeLineEndingsPlugin(), stockWorkspacePlugin(), timelineRefactorPlugin(), overlapReplacementPlugin(), playbackMediaPlugin(), unlimitedTimelineImportPlugin(), durationUiSyncPlugin(), programPlaybackSyncPlugin(), programPreviewStabilityPlugin(), premierePlayheadPlugin(), smoothTimelineDragPlugin(), trackDeletePlugin(), trackVisibilityUiPlugin(), timelineTransitionVisibilityPlugin(), allAudioWaveformsPlugin(), programTransformOverlayPlugin(), monitorTransportPlugin(), trackHeaderPlugin(), monitorGuidesPlugin(), captionKaraokePlugin(), react()],
 })

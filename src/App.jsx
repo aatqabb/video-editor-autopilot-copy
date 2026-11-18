@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import ScriptWorkspace from './ScriptWorkspace'
-import FootageFinderWorkspace from './FootageFinderWorkspace'
-import YoutubeResearchWorkspace from './YoutubeResearchWorkspace'
 import ScriptBreakdownWorkspace from './ScriptBreakdownWorkspace'
 import CaptionWorkspace from './CaptionWorkspace'
 import { EffectsWorkspace, SfxWorkspace, TextWorkspace, TransitionWorkspace } from './CreativePanels'
@@ -17,15 +15,16 @@ import { resolveKeyframeValue } from './keyframeMath'
 // single source of truth for which tab shows which panel further down.
 // The tab strip itself decides what's "primary" vs tucked under "More" —
 // see leftTabsPrimary/leftTabsMore and centerTabsPrimary/centerTabsMore.
-// "Properties" (an exact duplicate of "Effect Controls") and "Stock" (a
-// non-functional placeholder superseded by the real "Footage Finder"
-// panel) were removed outright rather than hidden — keeping dead/duplicate
-// tabs in a "More" menu would just relocate the clutter. "Essential Sound"
-// was renamed to "Voice / Music" to match what the panel actually is.
+// "Properties" (an exact duplicate of "Effect Controls") was removed
+// outright rather than hidden — keeping dead/duplicate tabs in a "More"
+// menu would just relocate the clutter. "Essential Sound" was renamed to
+// "Voice / Music" to match what the panel actually is. "Stock" is the one
+// footage-sourcing tab (Pexels/Pixabay/Coverr/Unsplash, all licensed) —
+// the earlier YouTube-based "Footage Finder" panel was removed by request.
 const leftTabsPrimary = ['Media', 'Effect Controls', 'Effects', 'Text']
 const leftTabsMore = ['Project', 'Tools']
 const centerTabsPrimary = ['Source', 'Captions', 'SFX', 'Transitions', 'Voice / Music', 'Export']
-const centerTabsMore = ['Script', 'Footage Finder', 'Stock', 'YouTube Research', 'Script Breakdown']
+const centerTabsMore = ['Script', 'Stock', 'Script Breakdown']
 
 const shortcutRows = [
   ['Space', 'Play / Pause preview'],
@@ -117,6 +116,75 @@ function bounceOutScale(q) {
   if (q < .3) return 1 + .15 * (q / .3)
   return 1.15 * (1 - (q - .3) / .7)
 }
+// A tighter, higher-frequency decaying wobble — visually distinct from
+// Bounce (one big overshoot) for the newer "Spring" preset.
+function springInScale(p) {
+  return 1 + 0.28 * Math.sin(p * Math.PI * 2.4) * (1 - p)
+}
+function springOutScale(p) {
+  return (1 - p) + 0.22 * Math.sin(p * Math.PI * 2.2) * (1 - p)
+}
+
+function hexToRgba(hex, alpha) {
+  const h = (hex || '#000000').replace('#', '')
+  const r = Number.parseInt(h.slice(0, 2), 16) || 0
+  const g = Number.parseInt(h.slice(2, 4), 16) || 0
+  const b = Number.parseInt(h.slice(4, 6), 16) || 0
+  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`
+}
+
+// Background fill can carry its own baked-in alpha (from the color picker,
+// e.g. "#000000b3") — the Appearance section's separate Opacity slider
+// scales THAT alpha down further rather than replacing it.
+function scaleBackgroundAlpha(color, opacityPct) {
+  if (!color || color === 'transparent' || color === '#00000000') return 'transparent'
+  const hex = color.replace('#', '')
+  const r = Number.parseInt(hex.slice(0, 2), 16) || 0
+  const g = Number.parseInt(hex.slice(2, 4), 16) || 0
+  const b = Number.parseInt(hex.slice(4, 6), 16) || 0
+  const baseAlpha = hex.length >= 8 ? Number.parseInt(hex.slice(6, 8), 16) / 255 : 1
+  const alpha = baseAlpha * Math.max(0, Math.min(100, opacityPct)) / 100
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+// Resolves one of a TEXT clip's own keyframeable transform properties
+// (x/y/scale/rotation/opacity, set from the Effect Controls tab — see
+// TextEffectControls in ClipControls.jsx) at the given absolute playhead.
+function resolveTextKeyframeValue(clip, key, baseValue, playhead) {
+  const keyframe = clip?.textStyle?.keyframes?.[key]
+  const duration = Math.max(.05, Number(clip.duration) || 0)
+  const localTime = playhead - clip.start
+  return resolveKeyframeValue(keyframe, baseValue, localTime, duration)
+}
+
+const TEXT_WEIGHT_NUMBERS = { Thin: 100, ExtraLight: 200, Light: 300, Regular: 400, Medium: 500, SemiBold: 600, Bold: 700, ExtraBold: 800, Black: 900 }
+
+// Greedy balanced word-wrap into exactly `n` lines by character count —
+// good enough for captions/titles without pulling in a full text-layout
+// engine. Never splits a single word, so very short texts (fewer words
+// than lines) simply return fewer, non-empty lines.
+function splitTextIntoLines(text, n) {
+  const words = text.split(/\s+/).filter(Boolean)
+  if (n <= 1 || words.length <= 1) return [text]
+  const lineCount = Math.min(n, words.length)
+  const targetLen = words.reduce((sum, w) => sum + w.length + 1, 0) / lineCount
+  const lines = []
+  let current = []
+  let currentLen = 0
+  let linesLeft = lineCount
+  for (const word of words) {
+    if (linesLeft > 1 && current.length && currentLen + word.length + 1 > targetLen) {
+      lines.push(current.join(' '))
+      current = []
+      currentLen = 0
+      linesLeft -= 1
+    }
+    current.push(word)
+    currentLen += word.length + 1
+  }
+  if (current.length) lines.push(current.join(' '))
+  return lines
+}
 
 function getTextOverlayPresentation(clip, playhead) {
   const style = clip.textStyle || {}
@@ -127,22 +195,45 @@ function getTextOverlayPresentation(clip, playhead) {
   let dx = 0
   let dy = 0
   let scale = 1
+  let scaleY = 1
   let blur = 0
+  let rotAnim = 0
+  let clipInset = null
+
+  // Static (or keyframed) transform set from Effect Controls / the Text
+  // panel's own Align and Transform section — independent of the
+  // entrance/exit animation curve computed below, the same way a video
+  // clip's own Position/Scale/Rotation/Opacity keyframes are separate from
+  // its transitions.
+  const posX = resolveTextKeyframeValue(clip, 'x', Number(style.x ?? 50), playhead)
+  const posY = resolveTextKeyframeValue(clip, 'y', Number(style.y ?? 50), playhead)
+  const baseScale = resolveTextKeyframeValue(clip, 'scale', Number(style.scale ?? 100), playhead) / 100
+  const rotation = resolveTextKeyframeValue(clip, 'rotation', Number(style.rotation ?? 0), playhead)
+  const baseOpacity = resolveTextKeyframeValue(clip, 'opacity', Number(style.opacity ?? 100), playhead) / 100
+  const anchorX = Number(style.anchorX) || 0
+  const anchorY = Number(style.anchorY) || 0
 
   const applyAnimation = (name, progress, entering) => {
     const p = Math.max(0, Math.min(1, progress))
     const amount = entering ? 1 - p : p
     if (name.includes('Fade')) opacity = Math.min(opacity, 1 - amount)
-    if (name.includes('Slide Up')) dy = 45 * amount
-    if (name.includes('Slide Down')) dy = -45 * amount
-    if (name.includes('Slide Left')) dx = 65 * amount
-    if (name.includes('Slide Right')) dx = -65 * amount
+    if (name.includes('Slide Up')) dy += 45 * amount
+    if (name.includes('Slide Down')) dy += -45 * amount
+    if (name.includes('Slide Left')) dx += 65 * amount
+    if (name.includes('Slide Right')) dx += -65 * amount
     if (name === 'Bounce') scale = bounceInScale(p)
     else if (name === 'Bounce Out') scale = bounceOutScale(p)
+    else if (name === 'Spring In') scale = springInScale(p)
+    else if (name === 'Spring Out') scale = springOutScale(p)
     else if (name.includes('Zoom In')) scale = .65 + .35 * p
     else if (name.includes('Zoom Out') || name.includes('Shrink')) scale = 1 - .35 * amount
     else if (name.includes('Pop')) scale = .65 + .35 * Math.min(1, p * 1.35)
     if (name.includes('Blur')) blur = 9 * amount
+    if (name.includes('Rotate')) rotAnim += (entering ? -1 : 1) * 35 * amount
+    if (name.includes('Flip')) scaleY = Math.min(scaleY, 1 - amount)
+    if (name.includes('Wipe Left')) clipInset = entering ? [0, amount * 100, 0, 0] : [0, 0, 0, amount * 100]
+    if (name.includes('Wipe Right')) clipInset = entering ? [0, 0, 0, amount * 100] : [0, amount * 100, 0, 0]
+    if (name.includes('Glitch')) { dx += Math.sin(local * 41) * 9 * amount; dy += Math.sin(local * 53) * 5 * amount }
   }
 
   if (style.animationIn && style.animationIn !== 'None' && local < animDuration) applyAnimation(style.animationIn, local / animDuration, true)
@@ -158,24 +249,81 @@ function getTextOverlayPresentation(clip, playhead) {
     displayText = words.slice(0, count).join(' ')
   }
 
+  // Force the text into exactly N lines (1-5) instead of free CSS wrapping —
+  // a balanced greedy split by character count, so e.g. a long caption set
+  // to "3" breaks into three roughly even lines wherever a word boundary
+  // lands closest, rather than wherever the box happens to be wide.
+  const lineBreakMode = style.lineBreakMode
+  if (lineBreakMode && lineBreakMode !== 'auto') {
+    displayText = splitTextIntoLines(displayText, Math.max(1, Math.min(5, Number(lineBreakMode) || 1))).join('\n')
+  }
+
+  // Superscript/Subscript apply to the whole text block (there's no
+  // per-character rich text here) — approximated as a shrink + vertical
+  // nudge of the entire layer, not a true inline baseline shift.
+  let supSubScale = 1
+  let supSubShiftPx = 0
+  if (style.superscript) { supSubScale = .7; supSubShiftPx = -12 }
+  else if (style.subscript) { supSubScale = .7; supSubShiftPx = 12 }
+
+  const verticalAnchor = style.verticalAnchor || 'middle'
+  const anchorYPct = verticalAnchor === 'top' ? 0 : verticalAnchor === 'bottom' ? -100 : -50
+
+  const fontSize = Math.max(8, Number(style.fontSize) || 64)
+  const baselineShift = Number(style.baselineShift) || 0
+  const lineSpacing = Number(style.lineSpacing) || 0
+
+  const strokeWidth = Number(style.strokeWidth) || 0
+  const webkitTextStroke = style.strokeEnabled && strokeWidth > 0 ? `${strokeWidth}px ${style.strokeColor || '#ffffff'}` : undefined
+
+  let textShadow
+  if (style.shadowEnabled) {
+    const distance = Number(style.shadowDistance) || 0
+    const angle = (Number(style.shadowAngle) || 0) * Math.PI / 180
+    const sx = Math.cos(angle) * distance
+    const sy = Math.sin(angle) * distance
+    const shadowBlur = Math.max(0, Number(style.shadowSize) || 0)
+    const shadowAlpha = Math.max(0, Math.min(100, style.shadowOpacity ?? 60)) / 100
+    textShadow = `${sx}px ${sy}px ${shadowBlur}px ${hexToRgba(style.shadowColor || '#000000', shadowAlpha)}`
+  }
+
+  const backgroundSize = Math.max(0, Number(style.backgroundSize) || 0)
+  const backgroundOpacity = style.backgroundOpacity === undefined ? 100 : Number(style.backgroundOpacity)
+  const backgroundColor = scaleBackgroundAlpha(style.background, backgroundOpacity)
+
   return {
     text: displayText,
     style: {
-      left: `${style.x ?? 50}%`,
-      top: `${style.y ?? 50}%`,
-      fontFamily: style.fontFamily || 'Segoe UI',
-      fontSize: `${Math.max(8, Number(style.fontSize) || 64)}px`,
-      color: style.color || '#fff',
-      background: style.background || 'transparent',
+      left: `${posX}%`,
+      top: `${posY}%`,
+      fontFamily: style.renderFontFamily || style.fontFamily || 'Segoe UI',
+      fontSize: `${fontSize}px`,
+      color: style.fillEnabled === false ? 'transparent' : (style.color || '#fff'),
+      background: backgroundColor,
+      backgroundClip: 'padding-box',
+      padding: `${3 + backgroundSize}px ${6 + backgroundSize}px`,
+      borderRadius: `${Math.max(0, Number(style.backgroundRadius) || 0)}px`,
       textAlign: style.align || 'center',
-      fontWeight: style.bold ? 700 : 400,
+      // A real registered local-font-variant face already IS the correct
+      // weight, so leave font-weight at 400 there; otherwise fall back to a
+      // synthetic numeric weight from the chosen variant label (or the
+      // legacy bold flag) so the browser fakes it as best it can.
+      fontWeight: style.renderFontFamily ? 400 : (TEXT_WEIGHT_NUMBERS[style.fontVariant] || (style.bold ? 700 : 400)),
       fontStyle: style.italic ? 'italic' : 'normal',
       textDecoration: style.underline ? 'underline' : 'none',
-      whiteSpace: style.wrap === false ? 'nowrap' : 'pre-wrap',
-      maxWidth: style.wrap === false ? 'none' : '86%',
-      opacity,
+      textTransform: style.allCaps ? 'uppercase' : 'none',
+      fontVariant: style.smallCaps ? 'small-caps' : 'normal',
+      letterSpacing: `${Number(style.tracking) || 0}px`,
+      lineHeight: `${Math.max(8, fontSize * 1.08 + lineSpacing)}px`,
+      whiteSpace: (lineBreakMode && lineBreakMode !== 'auto') ? 'pre-wrap' : (style.wrap === false ? 'nowrap' : 'pre-wrap'),
+      maxWidth: (lineBreakMode && lineBreakMode !== 'auto') ? '86%' : (style.wrap === false ? 'none' : '86%'),
+      opacity: opacity * baseOpacity,
       filter: blur ? `blur(${blur}px)` : undefined,
-      transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px) scale(${scale})`,
+      WebkitTextStroke: webkitTextStroke,
+      textShadow,
+      clipPath: clipInset ? `inset(${clipInset[0]}% ${clipInset[1]}% ${clipInset[2]}% ${clipInset[3]}%)` : undefined,
+      transformOrigin: `calc(50% + ${anchorX}px) calc(50% + ${anchorY}px)`,
+      transform: `translate(-50%, ${anchorYPct}%) translate(${dx}px, ${dy + baselineShift + supSubShiftPx}px) scale(${scale * baseScale * supSubScale}, ${scaleY * scale * baseScale * supSubScale}) rotate(${rotation + rotAnim}deg)`,
     },
   }
 }
@@ -372,6 +520,7 @@ function App() {
   const [recoveryAvailable, setRecoveryAvailable] = useState(() => Boolean(readAutosave()))
   const [autosaveTime, setAutosaveTime] = useState(null)
   const [centerTab, setCenterTab] = useState('Source')
+  const [monitorFullscreen, setMonitorFullscreen] = useState(false)
   const [toast, setToast] = useState('')
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -653,8 +802,13 @@ function App() {
   // notification for every intermediate value the way one explicit Apply
   // click deserves to.
   const updateTextLayer = (id, draft, { silent = false } = {}) => {
+    // Merge onto the clip's existing textStyle rather than replacing it
+    // outright — the Text panel only tracks font/color/animation/position
+    // fields locally, so a plain replace would silently wipe out
+    // scale/rotation/opacity/keyframes set from the Effect Controls tab
+    // the moment any Text-panel field (even an unrelated one) is edited.
     commitClips((current) => current.map((clip) => clip.id === id ? {
-      ...clip, name: draft.text || clip.name, text: draft.text || clip.text, duration: Math.max(.5, Number(draft.duration) || clip.duration), textStyle: { ...draft },
+      ...clip, name: draft.text || clip.name, text: draft.text || clip.text, duration: Math.max(.5, Number(draft.duration) || clip.duration), textStyle: { ...clip.textStyle, ...draft },
     } : clip))
     if (!silent) notify('Text layer updated')
   }
@@ -801,43 +955,6 @@ function App() {
     ])
     setSelectedClipIds([id])
     notify(`${result.provider} video added to ${preferredTrack.id}`)
-  }
-
-  const addFootageReferenceToTimeline = (result, sourceLineId, targetTrackId = 'V1', startAt = playhead) => {
-    const preferredTrack = tracks.find((track) => track.id === targetTrackId && track.type === 'video' && !track.locked)
-      || tracks.find((track) => track.type === 'video' && !track.locked)
-
-    if (!preferredTrack) return notify('Unlock a video track before adding a footage reference')
-
-    const id = `youtube-${result.videoId}-${Date.now()}`
-    const rawDuration = Number(result.end) > Number(result.start) ? result.end - result.start : 5
-    const duration = Math.max(2, Math.min(12, rawDuration))
-    const start = Math.max(0, Math.min(TIMELINE_SECONDS - duration, snapTime(startAt)))
-
-    commitClips((current) => [
-      ...current,
-      {
-        id,
-        trackId: preferredTrack.id,
-        name: `YouTube ref: ${result.title}`,
-        type: 'video',
-        kind: 'youtube-reference',
-        start,
-        duration,
-        color: 'youtube',
-        sourceIn: 0,
-        thumbnail: result.thumbnail,
-        pageUrl: result.pageUrl,
-        provider: 'YouTube',
-        videoId: result.videoId,
-        timestampStart: result.start,
-        timestampEnd: result.end,
-        matchScore: result.matchScore,
-        sourceLineId,
-      },
-    ])
-    setSelectedClipIds([id])
-    notify('YouTube reference added — replace with licensed footage before final export')
   }
 
   const getProjectDocument = () => buildProjectDocument({
@@ -1078,7 +1195,7 @@ function App() {
     }
 
     if (leftTab === 'Text') {
-      return <TextWorkspace selectedTextClip={selectedTextClip} onAddText={addTextLayer} onUpdateText={updateTextLayer} notify={notify} />
+      return <TextWorkspace selectedTextClip={selectedTextClip} onAddText={addTextLayer} onUpdateText={updateTextLayer} onUpdateTransform={updateClipControls} playhead={playhead} setPlayhead={setPlayhead} notify={notify} />
     }
 
     return <VideoControls clip={selectedClip} onUpdate={updateClipControls} notify={notify} playhead={playhead} setPlayhead={setPlayhead} />
@@ -1097,15 +1214,6 @@ function App() {
         />
       )
     }
-    if (centerTab === 'Footage Finder') {
-      return (
-        <FootageFinderWorkspace
-          notify={notify}
-          onAddFootage={(result, lineId) => addFootageReferenceToTimeline(result, lineId)}
-        />
-      )
-    }
-    if (centerTab === 'YouTube Research') return <YoutubeResearchWorkspace notify={notify} />
     if (centerTab === 'Script Breakdown') {
       return (
         <ScriptBreakdownWorkspace
@@ -1187,10 +1295,38 @@ function App() {
 
           <div className="resize-handle vertical" onMouseDown={(event) => startVerticalResize('right', event)} />
 
-          <section className="panel right-panel" style={{ width: `${rightWidth}%` }}>
-            <div className="tab-strip"><button className="active" onClick={() => notify('Program monitor')}>Program: Untitled Project</button></div>
-            <div className="panel-body center-body"><Monitor playing={playing} setPlaying={setPlaying} notify={notify} timelineClips={clips} playhead={playhead} projectSettings={projectSettings} /></div>
-          </section>
+          {(() => {
+            // The fullscreen wrap div only needs to exist while fullscreen is
+            // actually on. Rendering it unconditionally (even with no
+            // className) used to insert an extra, un-styled DOM node between
+            // the flex row and .right-panel — that node, not the section
+            // itself, became the real flex item, so .right-panel's own
+            // `flex:0 0 auto` (App.css) no longer applied to anything, and
+            // its `width: ${rightWidth}%` had no definite containing block
+            // to resolve against. The visible result: the panel drifted to a
+            // content-driven size instead of tracking rightWidth, and
+            // dragging the vertical resize-handle above stopped doing
+            // anything — exactly what showed up in Explainerchannel's
+            // recording. Only wrapping when monitorFullscreen is true keeps
+            // .right-panel as the direct, correctly-sized flex item the rest
+            // of the time (which is effectively always).
+            const rightPanel = (
+              <section className="panel right-panel" style={{ width: `${rightWidth}%` }}>
+                <div className="tab-strip">
+                  <button className="active" onClick={() => notify('Program monitor')}>Program: Untitled Project</button>
+                  <button
+                    className="monitor-fullscreen-toggle"
+                    onClick={() => setMonitorFullscreen((value) => !value)}
+                    title={monitorFullscreen ? 'Exit full screen preview' : 'View preview full screen'}
+                  >
+                    ⛶
+                  </button>
+                </div>
+                <div className="panel-body center-body"><Monitor playing={playing} setPlaying={setPlaying} notify={notify} timelineClips={clips} playhead={playhead} projectSettings={projectSettings} /></div>
+              </section>
+            )
+            return monitorFullscreen ? <div className="monitor-fullscreen-wrap">{rightPanel}</div> : rightPanel
+          })()}
         </section>
 
         <div className="resize-handle horizontal" onMouseDown={startTimelineResize} />
@@ -1295,17 +1431,32 @@ function Monitor({ playing, setPlaying, notify, empty = false, timelineClips = [
   const resolvedPositionX = activeVideo ? resolveVideoKeyframeValue(activeVideo, 'positionX', Number(videoControls.positionX ?? 50), playhead) : 50
   const resolvedPositionY = activeVideo ? resolveVideoKeyframeValue(activeVideo, 'positionY', Number(videoControls.positionY ?? 50), playhead) : 50
   const resolvedScale = activeVideo ? resolveVideoKeyframeValue(activeVideo, 'scale', Math.max(1, Number(videoControls.scale) || 100), playhead) : 100
+  // Uniform Scale (default/undefined -> true, so older saved clips with no
+  // scaleWidth field keep rendering exactly as before) links width to the
+  // same resolvedScale; unchecking it lets Scale Width drive width alone —
+  // matches Premiere's Scale/Scale Width/Uniform Scale trio.
+  const isUniformScale = videoControls.uniformScale !== false
+  const resolvedScaleWidth = isUniformScale ? resolvedScale : Math.max(1, Number(videoControls.scaleWidth) || 100)
   const resolvedOpacity = activeVideo ? resolveVideoKeyframeValue(activeVideo, 'opacity', Number(videoControls.opacity ?? 100), playhead) : 100
   const resolvedRotation = activeVideo ? resolveVideoKeyframeValue(activeVideo, 'rotation', Number(videoControls.rotation) || 0, playhead) : 0
+  // Anchor Point shifts the pivot scale/rotation happen around (same
+  // transform-origin trick the text overlay below already uses for its own
+  // Anchor X/Y) rather than the layer's position, so at the default (0,0) it
+  // changes nothing.
+  const anchorX = Number(videoControls.anchorX) || 0
+  const anchorY = Number(videoControls.anchorY) || 0
+  const blendMode = videoControls.blendMode && videoControls.blendMode !== 'normal' ? videoControls.blendMode : undefined
   const programVideoStyle = activeVideo ? {
     left: `${resolvedPositionX}%`,
     top: `${resolvedPositionY}%`,
-    width: `${Math.max(1, resolvedScale)}%`,
+    width: `${Math.max(1, resolvedScaleWidth)}%`,
     height: `${Math.max(1, resolvedScale)}%`,
     opacity: Math.max(0, Math.min(1, resolvedOpacity / 100)),
+    transformOrigin: `calc(50% + ${anchorX}px) calc(50% + ${anchorY}px)`,
     transform: `translate(-50%, -50%) rotate(${resolvedRotation}deg)`,
     clipPath: `inset(${videoControls.cropTop || 0}% ${videoControls.cropRight || 0}% ${videoControls.cropBottom || 0}% ${videoControls.cropLeft || 0}%)`,
     objectFit: fitMode === 'Fill' ? 'cover' : fitMode === 'Stretch' ? 'fill' : 'contain',
+    mixBlendMode: blendMode,
     ...effectStyle,
   } : undefined
 
@@ -1495,7 +1646,7 @@ function Timeline({ height, zoom, setZoom, trackHeight, setTrackHeight, tracks, 
         <span className="timeline-time">{formatTime(playhead)}</span>
         <span className={`snap-indicator ${snapping ? 'on' : ''}`}>Snap {snapping ? 'On' : 'Off'}</span>
         <div className="track-size-control"><span>Track</span><button onClick={() => setTrackHeight((value) => Math.max(28, value - 4))}>−</button><button onClick={() => setTrackHeight((value) => Math.min(76, value + 4))}>+</button></div>
-        <div className="timeline-zoom"><span>−</span><input type="range" min="60" max="180" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /><span>+</span></div>
+        <div className="timeline-zoom"><span>−</span><input type="range" min="60" max="180" value={zoom} style={{ '--range-progress': ((zoom - 60) / 120) * 100 }} onChange={(event) => setZoom(Number(event.target.value))} /><span>+</span></div>
       </div>
 
       <div className="timeline-body">

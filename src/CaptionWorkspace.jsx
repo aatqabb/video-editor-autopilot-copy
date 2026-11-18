@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { buildSrt, buildVtt, formatClockLabel, makeSegmentId, parseTimestampInput, saveTextFile, splitSegmentIntoChunks } from './captionEditor'
+import { buildSrt, buildVtt, estimateWordTimings, formatClockLabel, groupWordsIntoLines, makeSegmentId, parseTimestampInput, saveTextFile, splitSegmentIntoChunks } from './captionEditor'
+import { TEXT_IN_ANIMATIONS, TEXT_OUT_ANIMATIONS } from './CreativePanels'
 import './CaptionWorkspace.css'
 
 const AI_MODEL_OPTIONS = [
@@ -39,6 +40,17 @@ export default function CaptionWorkspace({ notify, onAddCaptions }) {
   const [backgroundColor, setBackgroundColor] = useState('#000000')
   const [align, setAlign] = useState('center')
   const [position, setPosition] = useState({ x: 50, y: 88 })
+  const [animationIn, setAnimationIn] = useState('Fade In')
+  const [animationOut, setAnimationOut] = useState('Fade Out')
+
+  // Word-by-word karaoke highlight: the word currently being spoken pops
+  // into a highlight color (or a highlight background box) while the rest
+  // of the line stays the base text color — driven by real Whisper
+  // word-level timestamps for AI-transcribed captions, or an estimated
+  // per-character split for manually-typed lines (captionEditor.js).
+  const [wordHighlight, setWordHighlight] = useState(false)
+  const [highlightColor, setHighlightColor] = useState('#ffd400')
+  const [highlightMode, setHighlightMode] = useState('color')
 
   const fileInputRef = useRef(null)
   const mediaRef = useRef(null)
@@ -132,7 +144,17 @@ export default function CaptionWorkspace({ notify, onAddCaptions }) {
   const addToTimeline = () => {
     if (!segments.length) return notify('Add at least one caption first')
     if (!onAddCaptions) return notify('Cannot add captions from here')
-    const outgoing = displayMode === 'word' ? segments.flatMap((segment) => splitSegmentIntoChunks(segment, 1)) : segments
+    const split = displayMode === 'word' ? segments.flatMap((segment) => splitSegmentIntoChunks(segment, 1)) : segments
+    // Every outgoing line needs real word timing before it can karaoke-
+    // highlight. AI-transcribed lines already carry it (from Whisper's
+    // word-level timestamps via groupWordsIntoLines); anything without it —
+    // manually-typed lines, or single-word chunks from the word-by-word
+    // display mode — gets an estimated split so the toggle still works.
+    const outgoing = wordHighlight
+      ? split.map((segment) => (Array.isArray(segment.words) && segment.words.length
+        ? segment
+        : { ...segment, words: estimateWordTimings(segment.text, segment.start, segment.end) }))
+      : split
     const style = {
       fontSize,
       color: textColor,
@@ -141,9 +163,12 @@ export default function CaptionWorkspace({ notify, onAddCaptions }) {
       x: position.x,
       y: position.y,
       wrap: displayMode === 'paragraph',
-      animationIn: 'Fade In',
-      animationOut: 'Fade Out',
+      animationIn,
+      animationOut,
       animationDuration: .3,
+      wordHighlight,
+      highlightColor,
+      highlightMode,
     }
     onAddCaptions(outgoing, style)
   }
@@ -170,25 +195,29 @@ export default function CaptionWorkspace({ notify, onAddCaptions }) {
       const audioData = await decodeToMono16k(mediaFile)
 
       setAiStatus('Transcribing... this can take a while on a longer file, please wait')
+      // Always ask for WORD-level timestamps (not just per-phrase) so the
+      // karaoke word-highlight has real spoken-word timing to use later —
+      // groupWordsIntoLines then re-assembles those words into normal
+      // readable caption lines, so this doesn't change what you see below,
+      // it just keeps the finer timing attached to each line.
       const result = await transcriber(audioData, {
         chunk_length_s: 30,
         stride_length_s: 5,
-        return_timestamps: true,
+        return_timestamps: 'word',
       })
 
-      const chunks = Array.isArray(result?.chunks) ? result.chunks : []
-      if (!chunks.length) {
+      const words = (Array.isArray(result?.chunks) ? result.chunks : [])
+        .filter((chunk) => chunk.text && chunk.text.trim())
+        .map((chunk) => ({
+          text: chunk.text.trim(),
+          start: Number(chunk.timestamp?.[0]) || 0,
+          end: Number(chunk.timestamp?.[1]) || (Number(chunk.timestamp?.[0]) || 0) + 0.2,
+        }))
+      if (!words.length) {
         setAiStatus('')
         return notify('AI could not find any speech in this file')
       }
-      const aiSegments = chunks
-        .filter((chunk) => chunk.text && chunk.text.trim())
-        .map((chunk) => ({
-          id: makeSegmentId(),
-          start: Number(chunk.timestamp?.[0]) || 0,
-          end: Number(chunk.timestamp?.[1]) || (Number(chunk.timestamp?.[0]) || 0) + 2,
-          text: chunk.text.trim(),
-        }))
+      const aiSegments = groupWordsIntoLines(words)
       setSegments((current) => [...current, ...aiSegments].sort((a, b) => a.start - b.start))
       setAiStatus('')
       notify(`AI drafted ${aiSegments.length} caption(s) — check and fix them below, AI transcription is not perfect`)
@@ -305,7 +334,33 @@ export default function CaptionWorkspace({ notify, onAddCaptions }) {
                 <label className="caption-bg-toggle"><input type="checkbox" checked={showBackground} onChange={(event) => setShowBackground(event.target.checked)} /> Background</label>
                 {showBackground && <label className="color-control">BG <input type="color" value={backgroundColor} onChange={(event) => setBackgroundColor(event.target.value)} /></label>}
               </div>
-              <small className="caption-style-hint">Ye style "Add Captions to Timeline" se banne wali sab caption clips par lagegi — export ki hui video mein bhi burn-in hogi.</small>
+
+              <div className="caption-style-row">
+                <span className="caption-style-label">Animation</span>
+                <select value={animationIn} onChange={(event) => setAnimationIn(event.target.value)} title="Entrance animation">
+                  {TEXT_IN_ANIMATIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                <select value={animationOut} onChange={(event) => setAnimationOut(event.target.value)} title="Exit animation">
+                  {TEXT_OUT_ANIMATIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
+
+              <div className="caption-style-row">
+                <span className="caption-style-label">Highlight</span>
+                <label className="caption-bg-toggle" title="Har lafz jo bola ja raha hai wahi highlight hoga — AI transcription se real timing, manual lines par estimate hoti hai">
+                  <input type="checkbox" checked={wordHighlight} onChange={(event) => setWordHighlight(event.target.checked)} /> Word-by-word
+                </label>
+                {wordHighlight && (
+                  <>
+                    <input type="color" className="swatch-only" value={highlightColor} onChange={(event) => setHighlightColor(event.target.value)} title="Highlight color" />
+                    <div className="caption-align-row">
+                      <button className={highlightMode === 'color' ? 'active' : ''} onClick={() => setHighlightMode('color')} title="Change the spoken word's text color">Text</button>
+                      <button className={highlightMode === 'box' ? 'active' : ''} onClick={() => setHighlightMode('box')} title="Show a highlight box behind the spoken word">Box</button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <small className="caption-style-hint" title="Ye style &quot;Add Captions to Timeline&quot; se banne wali sab caption clips par lagegi — export ki hui video mein bhi burn-in hogi.">Ye style sab caption clips par lagegi — export mein bhi burn-in hogi.</small>
             </div>
 
             <div className="caption-list-toolbar">

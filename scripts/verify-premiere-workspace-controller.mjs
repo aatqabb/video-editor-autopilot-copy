@@ -9,7 +9,7 @@ const checks = [
   ['old direct resize CSS is not imported', !main.includes("./DirectPanelResize.css")],
   ['workspace uses dedicated grid rows', css.includes('grid-template-rows:') && css.includes('--premiere-timeline-px')],
   ['upper workspace uses dedicated grid columns', css.includes('grid-template-columns:') && css.includes('--premiere-left-px') && css.includes('--premiere-right-px')],
-  ['splitter hit targets are ten pixels', css.includes('width:10px!important') && css.includes('height:10px!important')],
+  ['splitter hit targets are tightened to Premiere-like size (4px/5px)', css.includes('width:4px!important') && css.includes('height:5px!important')],
   ['pointer events are captured globally', controller.includes("document.addEventListener('pointerdown', onPointerDown, true)")],
   ['drag updates live through animation frames', controller.includes('requestAnimationFrame(apply)')],
   ['timeline has wide resize range', controller.includes('0.08, 0.88')],
