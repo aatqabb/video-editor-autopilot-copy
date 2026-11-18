@@ -21,6 +21,8 @@ export default function ProjectWorkspace({
   onSave,
   onSaveAs,
   onOpenProject,
+  onImportXml,
+  xmlImportReport,
   onRecover,
   recoveryAvailable,
   autosaveTime,
@@ -28,6 +30,7 @@ export default function ProjectWorkspace({
   notify,
 }) {
   const openRef = useRef(null)
+  const xmlRef = useRef(null)
 
   const applyAspect = (preset) => {
     const orientation = preset.width >= preset.height ? 'landscape' : 'portrait'
@@ -97,6 +100,38 @@ export default function ProjectWorkspace({
         <button onClick={() => openRef.current?.click()}>Open Project</button>
         <input ref={openRef} type="file" accept="application/json,.json" hidden onChange={(event) => onOpenProject(event.target.files?.[0])} />
       </div>
+
+      <div className="project-section-title">IMPORT XML TIMELINE</div>
+      <div className="project-file-actions">
+        <button className="primary" onClick={() => xmlRef.current?.click()}>Import XML</button>
+        <input
+          ref={xmlRef}
+          type="file"
+          accept=".xml,.fcpxml,.mp4,.mov,.mkv,.webm,.mp3,.wav,.m4a,.aac,.png,.jpg,.jpeg,.gif"
+          multiple
+          hidden
+          onChange={(event) => { onImportXml(event.target.files); event.target.value = '' }}
+        />
+      </div>
+      <div className="xml-import-hint">
+        Any XML timeline — FCPXML, Premiere XML or generic — opens as a project.
+        Pick the XML file together with its media files (Ctrl-click them all):
+        picked media is copied into the project, the rest stay as placeholders
+        to relink later.
+      </div>
+
+      {xmlImportReport && (
+        <div className="xml-import-report">
+          <strong>Imported {xmlImportReport.imported} clip{xmlImportReport.imported === 1 ? '' : 's'} from {xmlImportReport.fileName} ({xmlImportReport.format})</strong>
+          {xmlImportReport.bundled.length > 0 && (
+            <div>Media copied in: {xmlImportReport.bundled.join(', ')}</div>
+          )}
+          {xmlImportReport.missing.length > 0 && (
+            <div className="xml-import-missing">Missing media (placeholders): {xmlImportReport.missing.join(', ')}</div>
+          )}
+          {xmlImportReport.missing.length === 0 && <div>All media found — nothing missing.</div>}
+        </div>
+      )}
 
       <div className="autosave-status">
         <span>Auto Save</span>

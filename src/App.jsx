@@ -9,6 +9,7 @@ import ProjectWorkspace from './ProjectWorkspace'
 import MediaLibrary from './MediaLibrary'
 import ExportWorkspace from './ExportWorkspace'
 import { buildProjectDocument, clearAutosave, getRecentProjects, readAutosave, readProjectFile, rememberProject, saveProjectFile, writeAutosave } from './projectPersistence'
+import { parseXmlTimeline, matchMediaFiles } from './xmlTimelineImport'
 import { resolveKeyframeValue } from './keyframeMath'
 
 // Kept flat (not split into primary/more) since these two lists are the
@@ -539,6 +540,7 @@ function App() {
   const [markers, setMarkers] = useState([15.5])
   const [history, setHistory] = useState([])
   const [future, setFuture] = useState([])
+  const [xmlImportReport, setXmlImportReport] = useState(null)
   const [copiedClips, setCopiedClips] = useState([])
   const [contextMenu, setContextMenu] = useState(null)
 
@@ -1001,6 +1003,101 @@ function App() {
     }
   }
 
+  // Any-XML import: FCPXML, Premiere Pro XML or generic timeline XML opens
+  // as a project, exactly like Open Project — the timeline is rebuilt from
+  // the XML and the current project is replaced (undoable via Undo).
+  // Media files picked together with the XML are matched by file name and
+  // copied into the project as real assets (preview URL plus, in Electron,
+  // the real on-disk path, which the saved project file keeps). Media named
+  // in the XML but not picked stays on the timeline as a placeholder clip
+  // with mediaRelinkRequired, and is named in the import report.
+  const importXmlProject = async (files) => {
+    const picked = [...(files || [])]
+    if (!picked.length) return
+    const xmlFile = picked.find((file) => /\.fcpxml$/i.test(file.name) || /\.xml$/i.test(file.name))
+      || picked.find((file) => /xml/i.test(file.type))
+    if (!xmlFile) {
+      setXmlImportReport(null)
+      notify('Pick an XML timeline file (.xml or .fcpxml) to import')
+      return
+    }
+    const mediaFiles = picked.filter((file) => file !== xmlFile)
+    try {
+      const parsed = parseXmlTimeline(await xmlFile.text())
+      const matched = matchMediaFiles(parsed.clips, mediaFiles)
+      const now = Date.now()
+
+      // Make sure every track the XML needs exists; create missing ones.
+      const nextTracks = [...tracks]
+      const ensureTrack = (type, index) => {
+        const prefix = type === 'audio' ? 'A' : 'V'
+        const id = `${prefix}${index + 1}`
+        if (!nextTracks.some((track) => track.id === id)) {
+          const track = { id, type, locked: false, hidden: false, muted: false, solo: false }
+          if (type === 'video') nextTracks.unshift(track)
+          else nextTracks.push(track)
+        }
+        return id
+      }
+
+      const newClips = matched.map((clip, index) => {
+        const duration = Math.max(MIN_CLIP_DURATION, Number(clip.duration) || MIN_CLIP_DURATION)
+        const start = Math.max(0, Math.min(TIMELINE_SECONDS - duration, Number(clip.start) || 0))
+        const mediaFile = clip.mediaFile
+        const sourcePath = mediaFile
+          ? (window.videoEditorDesktop?.getPathForFile?.(mediaFile) || clip.sourcePath || '')
+          : (clip.sourcePath || '')
+        return {
+          id: `xml-${now}-${index}`,
+          trackId: ensureTrack(clip.type, Number(clip.trackIndex) || 0),
+          name: clip.name || 'Clip',
+          type: clip.type,
+          kind: 'xml-import',
+          start,
+          duration,
+          sourceDuration: duration,
+          color: clip.type === 'audio' ? 'green' : 'blue',
+          localUrl: mediaFile ? URL.createObjectURL(mediaFile) : null,
+          sourcePath,
+          sourceIn: Number(clip.sourceIn) || 0,
+          sourceFileName: clip.sourceFileName || clip.name,
+          mediaRelinkRequired: !mediaFile,
+          importedFromXml: true,
+          xmlSource: xmlFile.name,
+          xmlNote: clip.note || '',
+        }
+      })
+
+      pushHistory(clips)
+      setTracks(nextTracks)
+      setClips(newClips)
+      setMarkers([])
+      setPlayhead(0)
+      setSelectedClipIds([])
+      setFuture([])
+      setSaveHandle(null)
+      if (parsed.projectName) setProjectName(parsed.projectName)
+      else setProjectName(xmlFile.name.replace(/\.(fcpxml|xml)$/i, ''))
+      if (parsed.width && parsed.height) {
+        setProjectSettings((current) => ({ ...current, width: parsed.width, height: parsed.height }))
+      }
+
+      const bundled = matched.filter((clip) => clip.mediaFile).map((clip) => clip.sourceFileName)
+      const missing = matched.filter((clip) => !clip.mediaFile).map((clip) => clip.sourceFileName).filter(Boolean)
+      setXmlImportReport({
+        fileName: xmlFile.name,
+        format: parsed.format,
+        imported: newClips.length,
+        bundled: [...new Set(bundled)],
+        missing: [...new Set(missing)],
+      })
+      notify(`Imported ${newClips.length} clips from ${xmlFile.name} (${parsed.format})${missing.length ? ` — ${missing.length} media file(s) missing` : ''}`)
+    } catch (error) {
+      setXmlImportReport(null)
+      notify(error?.message || 'Could not import this XML file')
+    }
+  }
+
   const recoverProject = () => {
     const project = readAutosave()
     if (!project) return notify('No recovery autosave found')
@@ -1165,6 +1262,8 @@ function App() {
           onSave={() => saveProject(false)}
           onSaveAs={() => saveProject(true)}
           onOpenProject={openProject}
+          onImportXml={importXmlProject}
+          xmlImportReport={xmlImportReport}
           onRecover={recoverProject}
           recoveryAvailable={recoveryAvailable}
           autosaveTime={autosaveTime}
